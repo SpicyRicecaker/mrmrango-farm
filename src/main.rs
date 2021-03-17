@@ -19,11 +19,16 @@ async fn run(addresses: &[&str]) -> Result<Vec<String>, Box<dyn Error>> {
     // For each address, send http request to server, do so in the form of await all (in parallel)
     let client = reqwest::Client::new();
     let results = join_all(addresses.iter().map(|&a| client.get(a).send())).await;
+    let mut responses_string = Vec::new();
     let responses = join_all(results.iter().filter_map(|result| match result {
         Ok(response) => Some(response.text()),
-        Err(_) => None
-    })).await;
-
+        Err(_) => None,
+    }))
+    .await;
+    responses.iter().map(|result| match result {
+        Ok(res) => responses_string.push(res),
+        Err(_) => {}
+    });
 
     // results.iter().filter(|result| match result {
     //     Ok(_) => true,
@@ -38,7 +43,7 @@ async fn run(addresses: &[&str]) -> Result<Vec<String>, Box<dyn Error>> {
     //         Err(_) => (),
     //     }
     // }
-    
+
     // .iter()
     // .map(|result| match result {
     //     Ok(res) => (*res).text(),
@@ -46,7 +51,7 @@ async fn run(addresses: &[&str]) -> Result<Vec<String>, Box<dyn Error>> {
     // })
     // ;
     // As for the vector of results, we just want to print the results of the html file for now
-    Ok(out)
+    Ok(responses_string)
 }
 
 // Highlight one for crit A and one for crit B, otherwise don't do much else
