@@ -17,7 +17,6 @@ async fn main() {
     .collect();
 
     let bodies = run(addresses).await;
-    println!("{:?}", bodies);
 }
 
 async fn run(addresses: Vec<String>) -> Result<Vec<String>, Box<dyn Error>> {
@@ -61,11 +60,14 @@ async fn run(addresses: Vec<String>) -> Result<Vec<String>, Box<dyn Error>> {
 
     // The base github url probably won't change
     let github = "https://github.com";
-    // The base jar is going to look something like this
-    let base = "";
 
     // Assume that the name may change
     // We use the very first href with a .jar in it to determine the link of which we will get our download
+    // For every link, collect the href link,
+
+    // Then get the href date
+
+    // If the current 
 
     // In that, we search for a date range
     //
@@ -102,8 +104,8 @@ fn get_href_from_html(html: String) -> Option<String> {
     }
 }
 
-fn get_date_from_match(href: String) -> Vec<String> {
-    let date_pattern = Regex::new(r"(?P<year>\d{4})-(?P<month>\d{2})-(?P<day>\d{2})").unwrap();
+fn get_date_from_href(href: String) -> DateString {
+    let date_pattern = Regex::new(r"(?P<year>\d{4})-(?P<month>\d{2})-(?P<day>\d{2}).jar").unwrap();
     let captures = date_pattern.captures(&href).unwrap();
     // [captures.name("year")?, captures.name("month"), captures.name("day")]
     if let (Some(year), Some(month), Some(day)) = (
@@ -111,16 +113,28 @@ fn get_date_from_match(href: String) -> Vec<String> {
         captures.name("month"),
         captures.name("day"),
     ) {
-        [year, month, day]
-            .iter()
-            .map(|matched| matched.as_str().to_string())
-            .collect()
+        // [year, month, day]
+        //     .iter()
+        //     .map(|matched| matched.as_str().to_string())
+        //     .collect()
+        DateString {
+            year: year.as_str().to_string(),
+            month: month.as_str().to_string(),
+            day: day.as_str().to_string(),
+        }
     } else {
         println!("Error occured in getting year, month, and date matches from href");
         panic!();
     }
 }
+#[derive(Eq, PartialEq, Debug)]
+struct DateString {
+    day: String,
+    month: String,
+    year: String,
+}
 
+#[derive(Eq, PartialEq, Debug)]
 struct Date {
     day: u8,
     month: u8,
@@ -130,6 +144,14 @@ struct Date {
 impl Date {
     fn new(day: u8, month: u8, year: u32) -> Self {
         Date { day, month, year }
+    }
+    fn new_from_string (date_string: DateString) -> Option<Self> {
+        if let (Ok(day), Ok(month), Ok(year)) = (date_string.day.parse::<u8>(), date_string.month.parse::<u8>(), date_string.year.parse::<u32>()) {
+            Some(Self::new(day, month, year))
+        } else {
+            println!("An error occured parsing the date of the .jar file...");
+            None
+        }
     }
 }
 
@@ -166,6 +188,32 @@ mod test {
                   <div class="d-block py-1 py-md-2 Box-body px-2">
         "#;
         assert_eq!(get_href_from_html(html.to_string()), Some(href.to_string()))
+    }
+    #[test]
+    fn simple_date_from_href() {
+        let href = "/mrmangohands/lithium-fabric/releases/download/mc1.16.1-0.6.3-SNAPSHOT%2B2021-02-12/lithium-1.16.1-backport-fabric-0.6.3-SNAPSHOT+2021-02-12.jar";
+
+        let date = DateString {
+            year: "2021".to_string(),
+            month: "02".to_string(),
+            day: "12".to_string(),
+        };
+
+        assert_eq!(get_date_from_href(href.to_string()), date);
+    }
+    #[test]
+    fn simple_number_date_from_string_date() {
+        let string_date = DateString {
+            year: "2021".to_string(),
+            month: "02".to_string(),
+            day: "12".to_string(),
+        };
+        let number_date = Date {
+            year: 2021,
+            month: 2,
+            day: 12,
+        };
+        assert_eq!(Date::new_from_string(string_date).unwrap(), number_date);
     }
 }
 
