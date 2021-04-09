@@ -1,5 +1,6 @@
 use futures::future::join_all;
 use regex::Regex;
+use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::fs;
 
@@ -63,70 +64,100 @@ async fn run(addresses: Vec<String>) -> Result<Vec<String>, Box<dyn Error>> {
 
     // Assume that the name may change
     // We use the very first href with a .jar in it to determine the link of which we will get our download
-    // For every link, collect the href link,
+    // For every link
+    let jars = bodies
+        .into_iter()
+        // collect the href link,
+        .filter_map(Jar::get_href_from_html)
+        // and also the date
+        .map(|s| {
+            Jar::new(
+                s.clone(),
+                Date::new_from_string(Jar::get_date_from_href(s)).unwrap(),
+            )
+        });
 
-    // Then get the href date
+    if let Ok(json) = fs::read_to_string("dist/data.json") {
+        let old_jars: Result<Vec<Jar>, serde_json::Error> = serde_json::from_str(&json);
+        if let Ok(old_jars) = old_jars {
 
-    // If the current 
+        }
+    } else {
+        let serialized = serde_json::to_string(&jar).unwrap();
+    }
 
-    // In that, we search for a date range
-    //
+    // Then for every item in jars, we want to compare the dates...
+    for (i, jar) in jars.enumerate() {
+        let temp = serde_json::to_string(&jars.collect::<Vec<Jar>>()).unwrap();
+    }
 
-    // temp.into_iter().enumerate().map(|(i,body)| match fs::write(format!("{}/{}.html", folder, i), body) {
-    //     Ok(_) => {println!("Successfully wrote {}.html", i)},
-    //     Err(_) => {println!("Error writing {}.html to {}", i, folder)}
-    // });
+    let bodies: Vec<String> = Vec::new();
 
     // As for the vector of results, we just want to print the results of the html file for now
     Ok(bodies)
 }
 
-// Takes in our html and returns the api link to download the latest file, if needed
-fn get_href_from_html(html: String) -> Option<String> {
-    // If the regex returned ok
-    if let Ok(href_pattern) = Regex::new(r"/(.*.jar)") {
-        // Then find the href inside the html!
-        if let Some(href) = href_pattern.captures(&html) {
-            // Then return the href!
-            if let Some(href) = href.get(0) {
-                Some(href.as_str().to_string())
+
+
+#[derive(Serialize, Deserialize, Debug)]
+struct Jar {
+    href: String,
+    date: Date,
+}
+
+impl Jar {
+    fn new(href: String, date: Date) -> Self {
+        Jar { href, date }
+    }
+    // Takes in our html and returns the api link to download the latest file, if needed
+    fn get_href_from_html(html: String) -> Option<String> {
+        // If the regex returned ok
+        if let Ok(href_pattern) = Regex::new(r"/(.*.jar)") {
+            // Then find the href inside the html!
+            if let Some(href) = href_pattern.captures(&html) {
+                // Then return the href!
+                if let Some(href) = href.get(0) {
+                    Some(href.as_str().to_string())
+                } else {
+                    println!("There was some error turning the captured href into string");
+                    None
+                }
             } else {
-                println!("There was some error turning the captured href into string");
+                println!("Couldn't find a link inside the html...is the website broken?");
                 None
             }
         } else {
-            println!("Couldn't find a link inside the html...is the website broken?");
+            println!("There was some error initiating regex...");
             None
         }
-    } else {
-        println!("There was some error initiating regex...");
-        None
+    }
+
+    fn get_date_from_href(href: String) -> DateString {
+        let date_pattern =
+            Regex::new(r"(?P<year>\d{4})-(?P<month>\d{2})-(?P<day>\d{2}).jar").unwrap();
+        let captures = date_pattern.captures(&href).unwrap();
+        // [captures.name("year")?, captures.name("month"), captures.name("day")]
+        if let (Some(year), Some(month), Some(day)) = (
+            captures.name("year"),
+            captures.name("month"),
+            captures.name("day"),
+        ) {
+            // [year, month, day]
+            //     .iter()
+            //     .map(|matched| matched.as_str().to_string())
+            //     .collect()
+            DateString {
+                year: year.as_str().to_string(),
+                month: month.as_str().to_string(),
+                day: day.as_str().to_string(),
+            }
+        } else {
+            println!("Error occured in getting year, month, and date matches from href");
+            panic!();
+        }
     }
 }
 
-fn get_date_from_href(href: String) -> DateString {
-    let date_pattern = Regex::new(r"(?P<year>\d{4})-(?P<month>\d{2})-(?P<day>\d{2}).jar").unwrap();
-    let captures = date_pattern.captures(&href).unwrap();
-    // [captures.name("year")?, captures.name("month"), captures.name("day")]
-    if let (Some(year), Some(month), Some(day)) = (
-        captures.name("year"),
-        captures.name("month"),
-        captures.name("day"),
-    ) {
-        // [year, month, day]
-        //     .iter()
-        //     .map(|matched| matched.as_str().to_string())
-        //     .collect()
-        DateString {
-            year: year.as_str().to_string(),
-            month: month.as_str().to_string(),
-            day: day.as_str().to_string(),
-        }
-    } else {
-        println!("Error occured in getting year, month, and date matches from href");
-        panic!();
-    }
-}
 #[derive(Eq, PartialEq, Debug)]
 struct DateString {
     day: String,
@@ -134,7 +165,7 @@ struct DateString {
     year: String,
 }
 
-#[derive(Eq, PartialEq, Debug)]
+#[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
 struct Date {
     day: u8,
     month: u8,
@@ -145,8 +176,12 @@ impl Date {
     fn new(day: u8, month: u8, year: u32) -> Self {
         Date { day, month, year }
     }
-    fn new_from_string (date_string: DateString) -> Option<Self> {
-        if let (Ok(day), Ok(month), Ok(year)) = (date_string.day.parse::<u8>(), date_string.month.parse::<u8>(), date_string.year.parse::<u32>()) {
+    fn new_from_string(date_string: DateString) -> Option<Self> {
+        if let (Ok(day), Ok(month), Ok(year)) = (
+            date_string.day.parse::<u8>(),
+            date_string.month.parse::<u8>(),
+            date_string.year.parse::<u32>(),
+        ) {
             Some(Self::new(day, month, year))
         } else {
             println!("An error occured parsing the date of the .jar file...");
@@ -187,7 +222,10 @@ mod test {
 
                   <div class="d-block py-1 py-md-2 Box-body px-2">
         "#;
-        assert_eq!(get_href_from_html(html.to_string()), Some(href.to_string()))
+        assert_eq!(
+            Jar::get_href_from_html(html.to_string()),
+            Some(href.to_string())
+        )
     }
     #[test]
     fn simple_date_from_href() {
@@ -199,7 +237,7 @@ mod test {
             day: "12".to_string(),
         };
 
-        assert_eq!(get_date_from_href(href.to_string()), date);
+        assert_eq!(Jar::get_date_from_href(href.to_string()), date);
     }
     #[test]
     fn simple_number_date_from_string_date() {
